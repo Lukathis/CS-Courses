@@ -282,7 +282,7 @@ int logicalNeg(int x) {
 int howManyBits(int x) {
   // int positive = !(x >> 31);
   // unsigned norm = ((~positive + 1u) & x) + ((~(!positive) + 1u) & (~x));
-  //int firstOne = 33 - (!norm + !(norm>>1) + !(norm>>2) + !(norm>>3) + !(norm>>4) + !(norm>>5) + !(norm>>6) + !(norm>>7) + !(norm>>8) + !(norm>>9) + !(norm>>10)
+  // int firstOne = 33 - (!norm + !(norm>>1) + !(norm>>2) + !(norm>>3) + !(norm>>4) + !(norm>>5) + !(norm>>6) + !(norm>>7) + !(norm>>8) + !(norm>>9) + !(norm>>10)
   //                           + !(norm>>11) + !(norm>>12) + !(norm>>13) + !(norm>>14) + !(norm>>15) + !(norm>>16) + !(norm>>17) + !(norm>>18) + !(norm>>19) + !(norm>>20)
   //                           + !(norm>>21) + !(norm>>22) + !(norm>>23) + !(norm>>24) + !(norm>>25) + !(norm>>26) + !(norm>>27) + !(norm>>28) + !(norm>>29) + !(norm>>30) + !(norm>>31));
 
@@ -307,7 +307,13 @@ int howManyBits(int x) {
  *   Rating: 4
  */
 unsigned floatScale2(unsigned uf) {
-  return 2;
+  // if non-standard
+  if ((uf & 0x7f800000) == 0) {
+     return ((uf & 0x7fffff) << 1) | ( (1<<31) & uf);
+  } else if ((uf & 0x7f800000) != 0x7f800000) {
+     return uf + 0x800000;
+  }
+  return uf;
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
@@ -322,7 +328,33 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-  return 2;
+  unsigned exp = (uf & 0x7f800000) >> 23;
+  unsigned frac = (uf & 0x7fffff);
+  unsigned sign = uf >> 31; 
+
+  // Single float bias is 127
+  int E = exp - 127;
+
+  if (E < 0) {
+    return 0;
+  }
+   
+  // TMAX=2^31-1, TMIN=-2^31
+  // exp - 127 <= 31 => exp <= 158
+  if (E >= 31) {
+    return 0x80000000u;
+  } 
+
+  // if exp==0, Non-standard, M=frac+1 
+  unsigned M = exp == 0 ? frac : (frac + (1 << 23));
+  
+  if (E < 23) {
+    int result = M >> (23 - E); 
+    return sign ? -result : result;
+  } else {
+    int result = M << (E - 23);
+    return sign ? -result : result;
+  } 
 }
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -338,5 +370,15 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+  if (x < -149) return 0;
+  if (x > 127) return 0x7f800000;
+  // if x <= -127 Non-standard
+  // exp part are all 0,  move frac
+  if (x <= -127) return 1<<(149+x); 
+  // Standard, x equivalent to E 
+  // exp = E + bias
+  int exp = x + 127;
+  return exp << 23;
+  
 }
+
